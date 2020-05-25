@@ -1,0 +1,57 @@
+# Project Write-Up
+
+### Project People Counter App
+**BY** - Abhik Banerjee
+**Contact** - abhik@abhikbanerjee.com, abhik.banerjee.1999@gmail.com
+**Model Used** - Single-shot detector V1 trained on CoCo Dataset
+**Link to Test Video** - https://youtu.be/aMronQi4H4I
+
+**STEPS to Reproduce** -
+1. Source the Environment.
+2. export DOWNLOADER_PATH="/opt/intel/openvino/deployment_tools/open_model_zoo/tools/downloader/"
+3. $DOWNLOADER_PATH/downloader.py --name ssd_mobilenet_v1_coco (Public Model from Open Model Zoo).
+4. mkdir IR
+5. python mo.py --input_model public/ssd_mobilenet_v1_coco/ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb --tensorflow_object_detection_api_pipeline_config public/ssd_mobilenet_v1_coco/ssd_mobilenet_v1_coco_2018_01_28/pipeline.config --tensorflow_use_custom_operations_config $MO/extensions/front/tf/ssd_support.json --output_dir IR
+6. Follow steps in Page 4 of Guide.
+5. python main.py -m IR/ssd_mobilenet_v1_coco/frozen_inference_graph.xml -i resources/Pedestrian_Detect_2_1_1.mp4 -d CPU -l /opt/intel/openvino/inference_engine/lib/intel64/libcpu_extension_sse4.so -pt 0.6 | ffmpeg -v warning -f rawvideo -pixel_format bgr24 -video_size 768x432 -framerate 24 -i - http://0.0.0.0:3004/fac.ffm
+
+**NOTE** 
+An output file titled "output.mp4" is produced after the whole stream concludes. In case of image, "output_image.jpg" is generated in the project root.
+
+## Explaining Custom Layers
+Custom Layers are those layer which are not supported by default on Intel OpenVINO. These layers include but are not limited to- any pre/post processing steps incorporated in the model, any un-supported operation in the model.
+The most common way to tackle such a problem can be to offload the computation of that layer to CPU. This can also involve cutting up the model till before the unsupported layer and then after that layer to the end.
+The models chosen for this specific task were - SSD V1, SSD v2 and SSD300. The models were trained on Microsoft's Coco Dataset. No custom layers were detected in the models used. Utlimately, SSD v1 was used for the project.
+
+## Comparing Model Performance
+
+My method(s) to compare models before and after conversion to Intermediate Representations
+were:- 
+
+1. Before Conversion, the models were loaded using OpenCV's DNN module and using that the inference was performed. 
+2. The Model was passed through Model Optimizer and IR was generated. These IRs were loaded into the Inference Engine and inference was done.
+
+**Note**:- In both cases, Person Tracking was implemented using Centroid Tracking.
+
+There was speed in the in model and the model was considerably lightweight after conversion. Errors in the model inference arising out of low fps were also somewhat corrected post-conversion. As for the accuracy, no strict measure was used for calculating the accuracy in either case as Non-Max Suppresion and Probability Thresholding were kept in place. However, the IR models seemed to perform better
+
+## Assess Model Use Cases
+
+From the very Video that was given for usage, I can think of one immediate use case:-
+1. Tracking the behaviour of a person in a given area of interest. The People in the video seemed to enter the frame, read from a piece of paper and then leave from one specific side. The Model can be used to predict if the person takes the wrong step - this can be detected via tracking the position of the centroid.
+2. The model can be used to assess the time a person spends in the frame. 
+
+These two points can also be commonly observed in *ATMs* were at a given time only 1 person should be present in the frame and they should not be present more than a specific alloted time. 
+
+Centroid tracking was used in the project. People who were actively being tracked were marked with a green centroid while those who have exited the frame were denoted by a red centroid at the last point they were spotted. This specific feature can be used for trajectory as well as most favoured point of exit prediction.
+
+## Assess Effects on End User Needs
+
+The End User may need speed and this can be brought at the cost of accuracy. However, the end user can also get a measure of how many people are in the frame and not their exact location. This can help reduce the total inference + post-processing time.
+If the end user needs accuracy, it can affect the speed of inference + post-processing. However, trackers like Kalman Filters can be used to track the person and prevent inferencing on every frame. This would significantly reduce inference time without affecting accuracy.
+
+## Model Research
+
+All 3 models used in the initial draft were usable. The model chosen in the final draft was SSD v1 (arbitrarily).
+
+**PS** -> It would have been really helpful if the OpenCV shipped with OpenVINO had "Trackers" which generally come OpenCV. Use of a tracker would have substantially sped up the whole process as I wouldn't have to infer on every frame and then process everytime after that. Inference would only happen when a person was lost or new person entered.
