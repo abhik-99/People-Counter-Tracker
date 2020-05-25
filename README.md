@@ -2,8 +2,11 @@
 
 ### Project People Counter App
 **BY** - Abhik Banerjee
+
 **Contact** - abhik@abhikbanerjee.com, abhik.banerjee.1999@gmail.com
+
 **Model Used** - Single-shot detector V1 trained on CoCo Dataset
+
 **Link to Test Video** - https://youtu.be/aMronQi4H4I
 
 #### Please go to Submission > Project Write-up for actual Submission to this project.
