@@ -2,11 +2,8 @@
 
 ### Project People Counter App
 **BY** - Abhik Banerjee
-
 **Contact** - abhik@abhikbanerjee.com, abhik.banerjee.1999@gmail.com
-
-**Model Used** - Single-shot detector V1 trained on CoCo Dataset
-
+**Model Used** - Single-shot detector Mobilenet V1 trained on CoCo Dataset
 **Link to Test Video** - https://youtu.be/aMronQi4H4I
 
 **STEPS to Reproduce** -
@@ -32,39 +29,27 @@ For reasoning behind choosing SSD Mobilenet v1 among SSD Mobilenet v1, v2 and SS
 
 My method(s) to compare model before and after conversion to Intermediate Representations
 were:- 
-1. The Model was passed through Model Optimizer and IR was generated. These IRs were loaded into the Inference Engine and inference was done.
+1. The Model was loaded using its native runtime and then inference was performed using the model.
+2. The Model was passed through Model Optimizer and IR was generated. These IRs were loaded into the Inference Engine and inference was done.
 
-A .pbtext file could not be generated using OpenCV's tf_text_graph_ssd.py (https://github.com/opencv/opencv/tree/master/samples/dnn) due to Error in Importing Tensorflow error as sumarized by:
+### 3.a) SSD Mobilenet v1
 
-**"""
+|       | Converted | Original |
+|-------|-----------|----------|
+| Size  |   25 MB   |   27 MB  |
+| Speed |   50 ms   |  2.6 sec |
 
-Traceback (most recent call last):
-  File "tf_text_graph_ssd.py", line 405, in <module>
-    createSSDGraph(args.input, args.config, args.output)
-  File "tf_text_graph_ssd.py", line 128, in createSSDGraph
-    writeTextGraph(modelPath, outputPath, outNames)
-  File "/home/workspace/opencv/samples/dnn/tf_text_graph_common.py", line 316, in writeTextGraph
-    from tensorflow.tools.graph_transforms import TransformGraph
-ModuleNotFoundError: No module named 'tensorflow.tools.graph_transforms'
     
-"""**
-
-Steps to reproduce the error:-
-
-1. pip install tensorflow
-2. git clone https://github.com/opencv/opencv.git
-3. cd opencv/samples/dnn/
-4. mkdir exported_pbtext
-5. python tf_text_graph_ssd.py --input /home/workspace/public/ssd_mobilenet_v1_coco/ssd_mobilenet_v1_coco_2018_01_28/frozen_inference_graph.pb --config /home/workspace/public/ssd_mobilenet_v1_coco/ssd_mobilenet_v1_coco_2018_01_28/pipeline.config --output exported_pbtext/ssd_v1.pbtext
-
-An issue regarding the same would be raised in the OpenCV Repo (hosted at the URL mentioned in step 2)after the current project review has concluded.
-    
+**Note**- Since only SSD Mobilenet v1 was finalized and used in the project, only metrics relating to it have been provided. For metrics relating to SSD Mobilenet v2, please run the IR for it provided in this repo and browse the Notebook.
 
 ## 3. Assess Model Use Cases
 
 From the very Video that was given for usage, I can think of one immediate use case:-
 1. Tracking the behaviour of a person in a given area of interest. The People in the video seemed to enter the frame, read from a piece of paper and then leave from one specific side. The Model can be used to predict if the person takes the wrong step - this can be detected via tracking the position of the centroid.
 2. The model can be used to assess the time a person spends in the frame. 
+
+
+
 
 These two points can also be commonly observed in *ATMs* were at a given time only 1 person should be present in the frame and they should not be present more than a specific alloted time. 
 
@@ -79,19 +64,22 @@ If the end user needs accuracy, it can affect the speed of inference + post-proc
 
 All 3 models used in the initial draft were usable. The model chosen in the final draft was SSD v1. DL Workbench has not been discussed yet in the coursework. For this reason, the stats of the models from their README files in the Open Model Zoo were considered.
 
-### 5.a) For SSD v1,
+### 5.a) For SSD Mobilenet v1,
 | Metric            | Value         |
 |-------------------|---------------|
 | Type              | Detection     |
 | GFLOPs            | 2.494         |
 | MParams           | 6.807         |
 
-### 5.b) For SSD v2,
+### 5.b) For SSD Mobilenet v2,
 | Metric            | Value         |
 |-------------------|---------------|
 | Type              | Detection     |
 | GFLOPs            | 3.775         |
 | MParams           | 16.818        |
+
+
+This model was not tested due to higher computational complexity. It was only considered during initial phase as a candidate. Only the above 2 models were tested. 
 
 ## 5.c) For SSD300,
 | Metric            | Value         |

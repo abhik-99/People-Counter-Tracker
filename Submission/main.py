@@ -42,6 +42,9 @@ MQTT_KEEPALIVE_INTERVAL = 60
 
 MODEL_NAME = "ssd_mobilenet_v1_coco"
 
+FRAME_WIDTH = 768
+FRAME_HEIGHT = 432
+
 #Taken from https://www.pyimagesearch.com/2015/02/16/faster-non-maximum-suppression-python/
 #implements non-max suppression
 # Malisiewicz et al.
@@ -171,7 +174,7 @@ def infer_on_stream(args, client):
     cap.open(args.input)
     
     if not image_flag:
-        out = cv2.VideoWriter('output.mp4', CODEC, 30, (768, 432))
+        out = cv2.VideoWriter('output.mp4', CODEC, 30, (FRAME_WIDTH, FRAME_HEIGHT))
     
     net_input_shape = infer_network.get_input_shape()
     
@@ -197,8 +200,7 @@ def infer_on_stream(args, client):
         
         #Getting Frames elapsed and FPS
         frames_elapsed += 1
-        timer = cv2.getTickCount()
-        fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
+        fps = cap.get(cv2.CAP_PROP_FPS) #Please note that this might not work with Webcam
 
         ### TODO: Pre-process the image as needed ###
         img = cv2.resize( frame, (net_input_shape[3], net_input_shape[2]))
@@ -219,14 +221,18 @@ def infer_on_stream(args, client):
                     if( prob_threshold != None):
                         #if probabilty threshold has been given as argument
                         if( each[2] >= prob_threshold ):
-                            filter_output.append([each[0], each[1], each[2] * 100, int(each[3] * net_input_shape[3]), int(each[4] * net_input_shape[2]), int(each[5] * net_input_shape[3]), int(each[6] * net_input_shape[2])])  
+#                             filter_output.append([each[0], each[1], each[2] * 100, int(each[3] * net_input_shape[3]), int(each[4] * net_input_shape[2]), int(each[5] * net_input_shape[3]), int(each[6] * net_input_shape[2])])
+                            filter_output.append([each[0], each[1], each[2] * 100, int(each[3] * FRAME_WIDTH), int(each[4] * FRAME_HEIGHT), int(each[5] * FRAME_WIDTH), int(each[6] * FRAME_HEIGHT)])
                     else:
-                        filter_output.append([each[0], each[1], each[2] * 100 , int(each[3] * net_input_shape[3]), int(each[4] * net_input_shape[2]), int(each[5] * net_input_shape[3]), int(each[6] * net_input_shape[2])])
+                        if( each[2] >= 0.6):
+                            #Default prob threshold is 0.6
+#                             filter_output.append([each[0], each[1], each[2] * 100 , int(each[3] * net_input_shape[3]), int(each[4] * net_input_shape[2]), int(each[5] * net_input_shape[3]), int(each[6] * net_input_shape[2])])
+                            filter_output.append([each[0], each[1], each[2] * 100 , int(each[3] * FRAME_WIDTH), int(each[4] * FRAME_HEIGHT), int(each[5] * FRAME_WIDTH), int(each[6] * FRAME_HEIGHT)])
                         
             #filter output now contains the original sized image boundaries
             filter_output = np.array(filter_output, dtype = 'int')
             filter_output = non_max_suppression_fast(filter_output, 0.3)
-            o_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
+            o_frame = cv2.resize(frame, (FRAME_WIDTH, FRAME_HEIGHT))
             tracked = [] #To get the IDs of the people tracker in this frame.
             CURRENT_COUNT = len(filter_output)
 
@@ -309,7 +315,7 @@ def infer_on_stream(args, client):
                         #if the person is still being tracked then Missing FPS is incremented
                         person_tracker[i][3] += 1
                         
-                    if (person_tracker[i][3] >= 150 and ( abs(person_centroids[i][0] - net_input_shape[2]) <= 60 or abs(person_centroids[i][1] - net_input_shape[3]) <= 40)) or ( abs(person_centroids[i][0] - net_input_shape[2]) <= 60 or abs(person_centroids[i][1] - net_input_shape[3]) <= 40) or person_tracker[i][3] >= 250:
+                    if (person_tracker[i][3] >= 150 and ( abs(person_centroids[i][0] - FRAME_WIDTH) <= 150 or abs(person_centroids[i][1] - FRAME_HEIGHT) <= 50)) or ( abs(person_centroids[i][0] - FRAME_WIDTH) <= 150 or abs(person_centroids[i][1] - FRAME_HEIGHT) <= 50) or person_tracker[i][3] >= 250:
                         #if the person has been missing for more than 100 frames then the person has left so removing him/her form list
                         if person_tracker[i][2]:
                             person_tracker[i][2] = 0
@@ -332,21 +338,31 @@ def infer_on_stream(args, client):
                 
                     
             for each_person in range(len(person_tracker)):
+                
                 if(person_tracker[each_person, 2]):
                     o_frame = cv2.circle(o_frame, (int(person_centroids[each_person][0]), int(person_centroids[each_person][1]) ), 2, (0, 255, 0), 2) #putting the centroid for tracking person
                     cv2.putText(o_frame, "("+str(person_centroids[each_person][0])+", "+str(person_centroids[each_person][1])+")", (int(person_centroids[each_person][0]), int(person_centroids[each_person][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
+                    
             for each_person in no_longer_tracking:
+                
                 o_frame = cv2.circle(o_frame, (int(each_person[1][0]), int(each_person[1][1]) ), 2, (0, 0, 255), 2) #putting the centroid for non-tracking person
+                
                 cv2.putText(o_frame, "("+str(each_person[1][0])+", "+str(each_person[1][1])+")", (int(each_person[1][0]), int(each_person[1][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1, cv2.LINE_AA)
                 
             
                 
-            cv2.putText(o_frame, "Total Frames -" + str(frames_elapsed), (10, net_input_shape[3] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
-            cv2.putText(o_frame, "Total Count -"+str(person_count)+", Current Count-"+ str(len(person_centroids)), (10, net_input_shape[3] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)            
-            cv2.putText(o_frame, "MODEL-"+MODEL_NAME, (10, net_input_shape[3] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
+            cv2.putText(o_frame, "Total Frames - " + str(frames_elapsed), (10, FRAME_HEIGHT - 70), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+            
+            cv2.putText(o_frame, "FPS - " + str(fps), (10, FRAME_HEIGHT - 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+            
+            cv2.putText(o_frame, "Inference Time - " + str(frames_elapsed / fps), (10, FRAME_HEIGHT - 40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
+            
+            cv2.putText(o_frame, "Total Count - "+str(person_count)+", Current Count - "+ str(len(filter_output)), (10, FRAME_HEIGHT - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)            
+            
+            cv2.putText(o_frame, "MODEL- "+MODEL_NAME, (10, FRAME_HEIGHT - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
             
             
-            output = cv2.resize(o_frame, (768, 432))
+            output = cv2.resize(o_frame, (FRAME_WIDTH, FRAME_HEIGHT))
 
             ### TODO: Extract any desired stats from the results ###
             
