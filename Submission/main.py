@@ -175,12 +175,12 @@ def infer_on_stream(args, client):
     
     net_input_shape = infer_network.get_input_shape()
     
-    PERSON_COUNT = 0 #for counting the number of persons
+    person_count = 0 #for counting the number of persons
     PERSON_DURATION = 0 #for the duration of time the person spends in the frames
-    PERSON_TRACKER = np.array([]) #for trackin the person 0->PERSON_COUNT, 1-> PERSON_DURATION, 2-> PERSON_TRACKING , 3-> MISSING FPS, 4-> had started tracking from 
-    PERSON_CENTROIDS = np.array([]) # keeps all the centroids of the people tracked.
-    FRAMES_ELAPSED = 0
-    NO_LONGER_TRACKING = [] #Keeping a list of all those people no longer being tracked
+    person_tracker = np.array([]) #for trackin the person 0->person_count, 1-> PERSON_DURATION, 2-> PERSON_TRACKING , 3-> MISSING FPS, 4-> had started tracking from 
+    person_centroids = np.array([]) # keeps all the centroids of the people tracked.
+    frames_elapsed = 0
+    no_longer_tracking = [] #Keeping a list of all those people no longer being tracked
     mean = 0
     p_mean = 0
     
@@ -196,7 +196,7 @@ def infer_on_stream(args, client):
         key_pressed = cv2.waitKey(60)
         
         #Getting Frames elapsed and FPS
-        FRAMES_ELAPSED += 1
+        frames_elapsed += 1
         timer = cv2.getTickCount()
         fps = cv2.getTickFrequency() / (cv2.getTickCount() - timer);
 
@@ -229,12 +229,24 @@ def infer_on_stream(args, client):
             o_frame = cv2.resize(frame, (net_input_shape[3], net_input_shape[2]))
             tracked = [] #To get the IDs of the people tracker in this frame.
             CURRENT_COUNT = len(filter_output)
+
+
+            #LOGIC:-            
+            # 1. For every detection, calculate the centroid of the detection
+            # 2. If the centroid is close to one of the tracking centroids, then the person must be still in the frame.
+            # 3. Update the matched centroid.
+            # 4. If no matching centroid is found for a detection, then it is a new person. The person is added to the person_tracking array.
+            # 5. For every person who is being tracked but is not detected in the frame, the specific criteria in line 309
+            # 6. A person who is not being tracked has his/her stats removed from person_tracking and person_centroids and put into no_longer_tracking
+
+
+
             for each in filter_output:
                 PERSON_CENTROID = ((each[3] + each[5])/2, (each[4] + each[6])/2 )
                 person_found_flag = False
                 
-                if len(PERSON_CENTROIDS) > 0 :                    
-                    x, y = PERSON_CENTROIDS[np.where(PERSON_TRACKER[:,2] == 1), 0].flatten(), PERSON_CENTROIDS[ np.where(PERSON_TRACKER[:,2] == 1), 1].flatten()
+                if len(person_centroids) > 0 :                    
+                    x, y = person_centroids[np.where(person_tracker[:,2] == 1), 0].flatten(), person_centroids[ np.where(person_tracker[:,2] == 1), 1].flatten()
                     distances = ( (x - PERSON_CENTROID[0])**2 + (y - PERSON_CENTROID[1])**2 )**0.5
                     
                     if len(distances) > 0:
@@ -246,37 +258,37 @@ def infer_on_stream(args, client):
                             #if we are still tracking the person
                             o_frame = cv2.rectangle(o_frame, (each[3], each[4]), (each[5], each[6]), (255, 0, 0), 2)
                             o_frame = cv2.circle(o_frame, (int(PERSON_CENTROID[0]), int(PERSON_CENTROID[1])), 2, (0,0,255), 2) #Putting the centroid
-                            PERSON_TRACKER[idx][1] = time.time() - PERSON_TRACKER[idx][4] #Updating the Duration of Tracking
+                            person_tracker[idx][1] = time.time() - person_tracker[idx][4] #Updating the Duration of Tracking
 
-                            text_1 = "PERSON_ID-"+ str(int(PERSON_TRACKER[idx][0])+1)
-                            text_2 = "LOC-" + str(PERSON_CENTROIDS[idx])
-                            text_3 = "DUR-" + str(PERSON_TRACKER[idx][1])
+                            text_1 = "PERSON_ID-"+ str(int(person_tracker[idx][0])+1)
+                            text_2 = "LOC-" + str(person_centroids[idx])
+                            text_3 = "DUR-" + str(person_tracker[idx][1])
 
                             cv2.putText(o_frame, text_1 , (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
                             cv2.putText(o_frame, text_2 , (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
                             cv2.putText(o_frame, text_3 , (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
 
-                            PERSON_CENTROIDS[idx] = PERSON_CENTROID #updating the person's centroid
+                            person_centroids[idx] = PERSON_CENTROID #updating the person's centroid
                             person_found_flag = True #no new person was encountered
-                            tracked.append(PERSON_TRACKER[idx][0]) #adding idx to the tracked list
+                            tracked.append(person_tracker[idx][0]) #adding idx to the tracked list
                 
                 if person_found_flag == False :
                     #person was not found so 
                     
-                    person = [PERSON_COUNT, 0, 1, 0, time.time()]
+                    person = [person_count, 0, 1, 0, time.time()]
                     
-                    if len(PERSON_CENTROIDS) == 0:
-                        PERSON_TRACKER = np.append(PERSON_TRACKER, person)
-                        PERSON_CENTROIDS = np.append(PERSON_CENTROIDS, PERSON_CENTROID)
-                        PERSON_TRACKER = np.expand_dims(PERSON_TRACKER, axis=0)
-                        PERSON_CENTROIDS = np.expand_dims(PERSON_CENTROIDS, axis=0)
+                    if len(person_centroids) == 0:
+                        person_tracker = np.append(person_tracker, person)
+                        person_centroids = np.append(person_centroids, PERSON_CENTROID)
+                        person_tracker = np.expand_dims(person_tracker, axis=0)
+                        person_centroids = np.expand_dims(person_centroids, axis=0)
                     else:
-                        PERSON_TRACKER = np.vstack([PERSON_TRACKER, person])
-                        PERSON_CENTROIDS = np.vstack([PERSON_CENTROIDS, PERSON_CENTROID])
+                        person_tracker = np.vstack([person_tracker, person])
+                        person_centroids = np.vstack([person_centroids, PERSON_CENTROID])
                     
                     o_frame = cv2.rectangle(o_frame, (each[3], each[4]), (each[5], each[6]), (255, 0, 0), 2)
                     o_frame = cv2.circle(o_frame, (int(PERSON_CENTROID[0]), int(PERSON_CENTROID[1])), 2, (0,0,255), 2) #putting the centroid
-                    text_1 = "PERSON_ID-"+ str(PERSON_COUNT+1) 
+                    text_1 = "PERSON_ID-"+ str(person_count+1) 
                     text_2 = "LOC-" + str(PERSON_CENTROID)
                     text_3 = "DUR-" + str(person[1])
                     
@@ -284,53 +296,53 @@ def infer_on_stream(args, client):
                     cv2.putText(o_frame, text_2 , (10, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
                     cv2.putText(o_frame, text_3 , (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1, cv2.LINE_AA)
                     
-                    tracked.append(PERSON_COUNT)
-                    PERSON_COUNT += 1
+                    tracked.append(person_count)
+                    person_count += 1
                     person_found_flag = True
             
             i=0
-            while(i<len(PERSON_TRACKER)):
+            while(i<len(person_tracker)):
                 
-                if PERSON_TRACKER[i][0] not in tracked:
+                if person_tracker[i][0] not in tracked:
                     #if the person was not tracked in this frame
-                    if PERSON_TRACKER[i][2]:
+                    if person_tracker[i][2]:
                         #if the person is still being tracked then Missing FPS is incremented
-                        PERSON_TRACKER[i][3] += 1
+                        person_tracker[i][3] += 1
                         
-                    if (PERSON_TRACKER[i][3] >= 150 and ( abs(PERSON_CENTROIDS[i][0] - net_input_shape[2]) <= 60 or abs(PERSON_CENTROIDS[i][1] - net_input_shape[3]) <= 40)) or ( abs(PERSON_CENTROIDS[i][0] - net_input_shape[2]) <= 60 or abs(PERSON_CENTROIDS[i][1] - net_input_shape[3]) <= 40) or PERSON_TRACKER[i][3] >= 250:
+                    if (person_tracker[i][3] >= 150 and ( abs(person_centroids[i][0] - net_input_shape[2]) <= 60 or abs(person_centroids[i][1] - net_input_shape[3]) <= 40)) or ( abs(person_centroids[i][0] - net_input_shape[2]) <= 60 or abs(person_centroids[i][1] - net_input_shape[3]) <= 40) or person_tracker[i][3] >= 250:
                         #if the person has been missing for more than 100 frames then the person has left so removing him/her form list
-                        if PERSON_TRACKER[i][2]:
-                            PERSON_TRACKER[i][2] = 0
-                            person_stats = PERSON_TRACKER[i]
+                        if person_tracker[i][2]:
+                            person_tracker[i][2] = 0
+                            person_stats = person_tracker[i]
                             
-                            PERSON_CENTROIDS = list(PERSON_CENTROIDS)
-                            PERSON_TRACKER = list(PERSON_TRACKER)
+                            person_centroids = list(person_centroids)
+                            person_tracker = list(person_tracker)
                             
-                            person_centroid = PERSON_CENTROIDS.pop(i)
-                            person_stats = PERSON_TRACKER.pop(i)
+                            person_centroid = person_centroids.pop(i)
+                            person_stats = person_tracker.pop(i)
                             
-                            PERSON_CENTROIDS = np.array(PERSON_CENTROIDS)
-                            PERSON_TRACKER = np.array(PERSON_TRACKER)
+                            person_centroids = np.array(person_centroids)
+                            person_tracker = np.array(person_tracker)
                             
-                            NO_LONGER_TRACKING.append([person_stats, person_centroid])
+                            no_longer_tracking.append([person_stats, person_centroid])
                             
                 else:
-                    PERSON_TRACKER[i][3] = 0 #Person has been tracked and so his missing frames count is reset
+                    person_tracker[i][3] = 0 #Person has been tracked and so his missing frames count is reset
                 i += 1
                 
                     
-            for each_person in range(len(PERSON_TRACKER)):
-                if(PERSON_TRACKER[each_person, 2]):
-                    o_frame = cv2.circle(o_frame, (int(PERSON_CENTROIDS[each_person][0]), int(PERSON_CENTROIDS[each_person][1]) ), 2, (0, 255, 0), 2) #putting the centroid for tracking person
-                    cv2.putText(o_frame, "("+str(PERSON_CENTROIDS[each_person][0])+", "+str(PERSON_CENTROIDS[each_person][1])+")", (int(PERSON_CENTROIDS[each_person][0]), int(PERSON_CENTROIDS[each_person][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
-            for each_person in NO_LONGER_TRACKING:
+            for each_person in range(len(person_tracker)):
+                if(person_tracker[each_person, 2]):
+                    o_frame = cv2.circle(o_frame, (int(person_centroids[each_person][0]), int(person_centroids[each_person][1]) ), 2, (0, 255, 0), 2) #putting the centroid for tracking person
+                    cv2.putText(o_frame, "("+str(person_centroids[each_person][0])+", "+str(person_centroids[each_person][1])+")", (int(person_centroids[each_person][0]), int(person_centroids[each_person][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
+            for each_person in no_longer_tracking:
                 o_frame = cv2.circle(o_frame, (int(each_person[1][0]), int(each_person[1][1]) ), 2, (0, 0, 255), 2) #putting the centroid for non-tracking person
                 cv2.putText(o_frame, "("+str(each_person[1][0])+", "+str(each_person[1][1])+")", (int(each_person[1][0]), int(each_person[1][1])-10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 0, 255), 1, cv2.LINE_AA)
                 
             
                 
-            cv2.putText(o_frame, "Total Frames -" + str(FRAMES_ELAPSED), (10, net_input_shape[3] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
-            cv2.putText(o_frame, "Total Count -"+str(PERSON_COUNT)+", Current Count-"+ str(len(PERSON_CENTROIDS)), (10, net_input_shape[3] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)            
+            cv2.putText(o_frame, "Total Frames -" + str(frames_elapsed), (10, net_input_shape[3] - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
+            cv2.putText(o_frame, "Total Count -"+str(person_count)+", Current Count-"+ str(len(person_centroids)), (10, net_input_shape[3] - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)            
             cv2.putText(o_frame, "MODEL-"+MODEL_NAME, (10, net_input_shape[3] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (0, 255, 0), 1, cv2.LINE_AA)
             
             
@@ -341,12 +353,12 @@ def infer_on_stream(args, client):
             ### TODO: Calculate and send relevant information on ###
             ### current_count, total_count and duration to the MQTT server ###
             ### Topic "person": keys of "count" and "total" ###
-            client.publish("person", json.dumps({ "count": len(PERSON_CENTROIDS), "total": str(PERSON_COUNT)}))
+            client.publish("person", json.dumps({ "count": len(person_centroids), "total": str(person_count)}))
             
             
             
-            if len(NO_LONGER_TRACKING) > 0:
-                mean = np.mean([p[1] for p, c in NO_LONGER_TRACKING])
+            if len(no_longer_tracking) > 0:
+                mean = np.mean([p[1] for p, c in no_longer_tracking])
                 
             p_mean = mean
             ### Topic "person/duration": key of "duration" ###
